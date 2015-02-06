@@ -16,6 +16,7 @@ module PusherClient
       @path = "#{options[:ws_path]}/app/#{app_key}?client=#{CLIENT_ID}&version=#{PusherClient::VERSION}&protocol=#{PROTOCOL}"
       @key = app_key.to_s
       @secret = options[:secret] || false
+      @auth_data = nil
       @socket_id = nil
       @channels = Channels.new
       @global_channel = Channel.new('pusher_global_channel')
@@ -90,7 +91,10 @@ module PusherClient
       end
     end
 
-    def subscribe(channel_name, user_data = nil, auth_data = nil)
+    def subscribe(channel_name, auth_data, user_data = nil)
+      puts "HOLA AUTH"
+      @auth_data = @auth_data || auth_data
+      puts @auth_data
       if user_data.is_a? Hash
         user_data = user_data.to_json
       elsif user_data
@@ -101,13 +105,7 @@ module PusherClient
 
       channel = @channels.add(channel_name, user_data)
       if @connected
-        if !@socket
-          authorize(channel, method(:authorize_callback))
-        elsif auth_data
-          authorize(channel, method(:authorize_callback), auth_data)
-        else
-          raise ArgumentError, "auth hash or secret must be provided"
-        end
+        authorize(channel, method(:authorize_callback))
       end
 
       channel
@@ -133,19 +131,20 @@ module PusherClient
     end
 
     def subscribe_all
-      @channels.channels.clone.each { |k,v| subscribe(v.name, v.user_data) }
+      puts "SUBSCRIBE ALL TUS MUELAS"
+      @channels.channels.clone.each { |k,v| subscribe(v.name, nil, v.user_data) }
     end
 
     # auth for private and presence
-    def authorize(channel, callback, auth_hash = nil)
-      unless auth_hash
+    def authorize(channel, callback )
+      unless @auth_data
         if is_private_channel(channel.name)
           auth_data = get_private_auth(channel)
         elsif is_presence_channel(channel.name)
           auth_data = get_presence_auth(channel)
         end
       else
-        auth_data = auth_hash
+        auth_data = @auth_data
       end
       # could both be nil if didn't require auth
       callback.call(channel, auth_data, channel.user_data)
@@ -179,6 +178,9 @@ module PusherClient
     def get_presence_auth(channel)
       return @auth_method.call(@socket_id, channel) if @auth_method
 
+      puts "CHANNEL USER DATA"
+      puts channel.user_data
+      puts "CHANNEL USER DATA"
       string_to_sign = @socket_id + ':' + channel.name + ':' + channel.user_data
       signature = hmac(@secret, string_to_sign)
       "#{@key}:#{signature}"
