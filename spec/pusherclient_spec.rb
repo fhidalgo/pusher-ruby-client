@@ -122,6 +122,19 @@ describe "A PusherClient::Socket" do
       expect(@channel.subscribed).to be_truthy
     end
 
+    it 'should subscribe to a presence channel without secret' do
+      #Process done by a backend which autenticate us
+      string_to_sign = @socket.socket_id + ':' + 'presence-testchannel' + ':' + '{"user_id":"123"}'
+      digest = OpenSSL::Digest::SHA256.new
+      signature = OpenSSL::HMAC.hexdigest(digest, 'secret', string_to_sign)
+
+
+      @channel = @socket.subscribe('presence-testchannel', '123', "#{@key}:#{signature}")
+      expect(@socket.channels['presence-testchannel']).to eq(@channel)
+      expect(@channel.user_data).to eq('{"user_id":"123"}')
+      expect(@channel.subscribed).to be_truthy
+    end
+
     it 'should subscribe to a presence channel with custom channel_data' do
       @channel = @socket.subscribe('presence-testchannel', :user_id => '123', :user_name => 'john')
       expect(@socket.channels['presence-testchannel']).to eq(@channel)

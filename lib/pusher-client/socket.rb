@@ -15,7 +15,7 @@ module PusherClient
 
       @path = "#{options[:ws_path]}/app/#{app_key}?client=#{CLIENT_ID}&version=#{PusherClient::VERSION}&protocol=#{PROTOCOL}"
       @key = app_key.to_s
-      @secret = options[:secret]
+      @secret = options[:secret] || false
       @socket_id = nil
       @channels = Channels.new
       @global_channel = Channel.new('pusher_global_channel')
@@ -90,7 +90,7 @@ module PusherClient
       end
     end
 
-    def subscribe(channel_name, user_data = nil)
+    def subscribe(channel_name, user_data = nil, auth_data = nil)
       if user_data.is_a? Hash
         user_data = user_data.to_json
       elsif user_data
@@ -101,9 +101,16 @@ module PusherClient
 
       channel = @channels.add(channel_name, user_data)
       if @connected
-        authorize(channel, method(:authorize_callback))
+        if !@socket
+          authorize(channel, method(:authorize_callback))
+        elsif auth_data
+          authorize(channel, method(:authorize_callback), auth_data)
+        else
+          raise ArgumentError, "auth hash or secret must be provided"
+        end
       end
-      return channel
+
+      channel
     end
 
     def unsubscribe(channel_name)
@@ -113,7 +120,7 @@ module PusherClient
           'channel' => channel_name
         })
       end
-      return channel
+      channel
     end
 
     def bind(event_name, &callback)
@@ -130,11 +137,15 @@ module PusherClient
     end
 
     # auth for private and presence
-    def authorize(channel, callback)
-      if is_private_channel(channel.name)
-        auth_data = get_private_auth(channel)
-      elsif is_presence_channel(channel.name)
-        auth_data = get_presence_auth(channel)
+    def authorize(channel, callback, auth_hash = nil)
+      unless auth_hash
+        if is_private_channel(channel.name)
+          auth_data = get_private_auth(channel)
+        elsif is_presence_channel(channel.name)
+          auth_data = get_presence_auth(channel)
+        end
+      else
+        auth_data = auth_hash
       end
       # could both be nil if didn't require auth
       callback.call(channel, auth_data, channel.user_data)
